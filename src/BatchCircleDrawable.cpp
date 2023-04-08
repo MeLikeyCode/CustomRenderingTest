@@ -9,7 +9,6 @@
 BatchCircleDrawable::BatchCircleDrawable(const std::vector<std::tuple<sf::Vector2f, float, sf::Color>>& circles, int segmentsPerCircle)
 {
 	_numCircles = circles.size();
-	_segmentsPerCircle = segmentsPerCircle;
 
 	// vertex shader
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -18,16 +17,17 @@ BatchCircleDrawable::BatchCircleDrawable(const std::vector<std::tuple<sf::Vector
 
 		uniform mat4 transform; // viewport transform
 
-		layout (location = 0) in vec2 localPos;
-		layout (location = 1) in vec2 center;
-		layout (location = 2) in float radius;
-		layout (location = 3) in vec4 color;
+		layout (location = 0) in vec2 localPos; // a vertex of the circle geometry, from the "vertex VBO" (remember we only created one set of vertices for all circles to share)
+		
+		layout (location = 1) in vec2 center;	// position of the circle, from the "instance VBO"
+		layout (location = 2) in float radius;	// also from "instance VBO"
+		layout (location = 3) in vec4 color;	// ""
 
 		out vec4 ourColor;
 
 		void main()
 		{
-			vec2 position = localPos * radius + center;
+			vec2 position = localPos * radius + center; // take the vertex position, scale it by the radius, then translate by the position of the circle ("center")
 			gl_Position = transform * vec4(position, 0.0, 1.0);
 			ourColor = color;
 		}
@@ -79,7 +79,7 @@ BatchCircleDrawable::BatchCircleDrawable(const std::vector<std::tuple<sf::Vector
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
-	// create vertex buffer object (holds vertices, in GPU memory)
+	// create vertex buffer object (holds vertices, in GPU memory), for the vertices of a circle geometry
 	glGenBuffers(1, &_vbo);
 
 	// create vertex array object (holds info on how to interpret vbo (i.e. what fields the vertices have and where they are))
@@ -95,18 +95,18 @@ BatchCircleDrawable::BatchCircleDrawable(const std::vector<std::tuple<sf::Vector
 		vertices.push_back(x);
 		vertices.push_back(y);
 	}
-	_numVertices = vertices.size();
+	_numVerticesForACircle = vertices.size();
 
 	// copy vertices to vbo
 	glBindBuffer(GL_ARRAY_BUFFER, _vbo);
 	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
 
-	// Set vertex attribute
+	// Set vertex attributes
 	glBindVertexArray(_vao);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
 	glEnableVertexAttribArray(0);
 
-	// create instance data
+	// create instance data (aspects of a circle geometry that differs per circle, e.g. its position, radius, color, etc)
 	std::vector<GLfloat> instanceData;
 	for (const auto& circle : circles)
 	{
@@ -161,7 +161,7 @@ void BatchCircleDrawable::draw(sf::RenderTarget& target, sf::RenderStates states
 	// bind shader program
 	glUseProgram(_shaderProgram);
 
-	// bind vao
+	// bind vao (don't need to bind vbo because it's already bound to the vao???)
 	glBindVertexArray(_vao);
 
 	 // create view transformation matrix (based on window size)
@@ -183,14 +183,13 @@ void BatchCircleDrawable::draw(sf::RenderTarget& target, sf::RenderStates states
 	glUniformMatrix4fv(transformLocation, 1, GL_FALSE, transform);
 
 	// Draw using instanced rendering
-	glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, _numVertices, _numCircles);
+	glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, _numVerticesForACircle, _numCircles);
 
 	// unbind vao
 	glBindVertexArray(0);
 
-
 	//target.popGLStates();
-	target.resetGLStates();
+	target.resetGLStates(); // so subsequently, sfml drawings can be drawn
 }
 
 void BatchCircleDrawable::_checkShaderCompileErrors(unsigned int shader)

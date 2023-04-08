@@ -8,9 +8,6 @@
 /// Example:
 /// ~~~~~~~~~~~~~~~~
 /// BatchCircleDrawable d{theCircles}; // theCircles is a vector of (position,radius,color) tuples
-/// d.addPoint(sf::Vector2f(0,0));
-/// d.addPoint(sf::Vector2f(0,1));
-/// d.addPoint(sf::Vector2f(0,2));
 /// 
 /// sf::RenderTarget renderTarget; // assume this is assigned
 /// renderTarget.draw(&d);
@@ -33,8 +30,7 @@ private:
 	unsigned int _shaderProgram;
 	unsigned int _vbo;
 	unsigned int _vao;
-	int _numVertices;
-	int _segmentsPerCircle;
+	int _numVerticesForACircle;
 	int _numCircles;
 
 	void _checkShaderCompileErrors(unsigned int shader);
