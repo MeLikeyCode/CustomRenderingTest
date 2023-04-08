@@ -1,54 +1,97 @@
-#include <iostream>
-
-#include <GL/glew.h>
-
+#include <GL/glew.h> // must be included before any opengl headers (sfml includes opengl headers, so we must include glew before sfml)
 #include <SFML/Graphics.hpp>
 
-#include "BatchCircleDrawable.h"
+#include "BatchCircleDrawable.h" // my own custom batch circle renderer (uses instancing)
+
+/// Get a random integer in the range [from, to] (both inclusive)
+int randomInt(int from, int to)
+{
+    return from + rand() % (to - from + 1);
+}
+
+/// Create a BatchCircleDrawable containing a bunch of random circles.
+BatchCircleDrawable createBatchCircleDrawable(int numCircles, int xmin, int xmax, int ymin, int ymax, int rmin, int rmax)
+{
+	std::vector<std::tuple<sf::Vector2f, float, sf::Color>> circles;
+    for (int i = 0; i < numCircles; i++)
+    {
+        int x = randomInt(xmin, xmax);
+        int y = randomInt(ymin, ymax);
+        int r = randomInt(rmin, rmax);
+		circles.push_back(std::make_tuple(sf::Vector2f(x, y), r, sf::Color(rand() % 255, rand() % 255, rand() % 255, rand() % 255)));
+	}
+    BatchCircleDrawable customBatchDrawable(circles, 100);
+
+    return customBatchDrawable;
+}
+
+/// Create a bunch of sf::CircleShapes.
+std::vector<sf::CircleShape> createSfmlCircles(int numCircles, int xmin, int xmax, int ymin, int ymax, int rmin, int rmax)
+{
+	std::vector<sf::CircleShape> sfmlCircles;
+	for (int i = 0; i < numCircles; i++)
+  {
+        int x = randomInt(xmin, xmax);
+        int y = randomInt(ymin, ymax);
+        int r = randomInt(rmin, rmax);
+		sf::CircleShape circle(r, 100);
+		circle.setFillColor(sf::Color(rand() % 255, rand() % 255, rand() % 255, rand() % 255));
+		circle.setPosition(x, y);
+		sfmlCircles.push_back(circle);
+	}
+
+	return sfmlCircles;
+}
+
+/// Create FPS counter
+sf::Text createFpsCounterText(const sf::Font& font)
+{
+	sf::Text fps;
+	fps.setFont(font);
+	fps.setCharacterSize(100);
+	fps.setFillColor(sf::Color::White);
+	fps.setOutlineColor(sf::Color::Black);
+	fps.setOutlineThickness(40);
+	fps.setPosition(10, 10);
+
+	return fps;
+}
 
 int main()
 {
-    // create a window, which also creates an opengl context.
+    // create a sfml window, which also creates an opengl context.
     // an opengl context is bascially a state machine that holds all the state for opengl.
     // for example, the current shader program, the current vertex array object, etc.
-    sf::RenderWindow window(sf::VideoMode(1920, 1080), "Custom Physics");
+    sf::RenderWindow window(sf::VideoMode(1920, 1080), "Custom Batch Rendering (Instancing)");
 
     // must initialize glew *after* context has been created
     glewInit();
 
-    sf::CircleShape shape(100.f);
-    shape.setFillColor(sf::Color::Green);
-    shape.setPosition(0, 0);
-
-    sf::Text fps;
+    // fps counter
     sf::Font font;
     font.loadFromFile("Roboto-Regular.ttf");
-    fps.setFont(font);
-    fps.setCharacterSize(100);
-    fps.setFillColor(sf::Color::White);
-    fps.setOutlineColor(sf::Color::Black);
-    fps.setOutlineThickness(40);
-    fps.setPosition(10, 10);
+    sf::Text fps = createFpsCounterText(font);
 
-    // create random circles
+    // create (don't draw yet) the circles
     int xmax = window.getSize().x;
     int ymax = window.getSize().y;
     int xmin = 0;
     int ymin = 0;
     int rmax = 50;
     int rmin = 0;
+    int numCircles = 50000;
 
-    std::vector< std::tuple<sf::Vector2f, float, sf::Color> > circles;
-    for (int i = 0; i < 50000; ++i)
-    {
-		circles.push_back(std::make_tuple(sf::Vector2f(xmin + rand() % xmax, ymin + rand() % ymax), rmin + rand() % rmax, sf::Color(rand() % 255, rand() % 255, rand() % 255,rand() % 255)));
-	}
-    BatchCircleDrawable customDrawable(circles,100);
+    // we can either use my custom batch renderer, or just use sfml's built in circle renderer, so we create circles for both
+	BatchCircleDrawable customBatchDrawable = createBatchCircleDrawable(numCircles, xmin, xmax, ymin, ymax, rmin, rmax);
+	std::vector<sf::CircleShape> sfmlCircles = createSfmlCircles(numCircles, xmin, xmax, ymin, ymax, rmin, rmax);
+    
+    // this is what determines which will be rendered (my own batch renderer or sfmls)
+    bool useCustomRenderer = true; // if false, use sfml renderer
 
-    window.setActive(true);
+    window.setActive(true); // make the window's opengl context the current context (opengl commands operate on a current context)
 
-    int numFrames = 0;
-    sf::Clock clock;
+    int numFrames = 0; // number of frames that have passed
+    sf::Clock clock; // time that has passed
 
     while (window.isOpen())
     {
@@ -63,18 +106,30 @@ int main()
 
         window.clear();
 
-        //window.draw(shape);
-        window.draw(customDrawable);
+        if (useCustomRenderer)
+        {
+            // draw circles using custom batch (instancing) renderer
+            window.draw(customBatchDrawable);
+        }
+        else {
+            // draw circles using sfml
+            for (auto& circle : sfmlCircles)
+            {
+                window.draw(circle);
+            }
+        }
         window.draw(fps);
+        
         window.display();
 
+        // update fps counter
         numFrames += 1;
         if (clock.getElapsedTime().asSeconds() >= 1.0f)
         {
             fps.setString(std::to_string(numFrames));
-			numFrames = 0;
-			clock.restart();
-		}
+            numFrames = 0;
+            clock.restart();
+        }
     }
 
     return 0;
