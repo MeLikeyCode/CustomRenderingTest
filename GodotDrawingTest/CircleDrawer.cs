@@ -10,8 +10,8 @@ public partial class CircleDrawer : Godot.Node2D
 	int xmax = 1920;
     int ymin = 0;
     int ymax = 1080;
-    int rmin = 0;
-    int rmax = 50;
+    int rmin = 1;
+    int rmax = 5;
 	int numCircles = 50000;
 
 	// Called every frame. 'delta' is the elapsed time since the previous frame.

@@ -10,7 +10,7 @@ int randomInt(int from, int to)
 }
 
 /// Create a BatchCircleDrawable containing a bunch of random circles.
-BatchCircleDrawable createBatchCircleDrawable(int numCircles, int xmin, int xmax, int ymin, int ymax, int rmin, int rmax)
+BatchCircleDrawable createBatchCircleDrawable(int numCircles, int xmin, int xmax, int ymin, int ymax, int rmin, int rmax, int numSegmentsPerCircle)
 {
 	std::vector<std::tuple<sf::Vector2f, float, sf::Color>> circles;
     for (int i = 0; i < numCircles; i++)
@@ -20,13 +20,13 @@ BatchCircleDrawable createBatchCircleDrawable(int numCircles, int xmin, int xmax
         int r = randomInt(rmin, rmax);
 		circles.push_back(std::make_tuple(sf::Vector2f(x, y), r, sf::Color(rand() % 255, rand() % 255, rand() % 255, rand() % 255)));
 	}
-    BatchCircleDrawable customBatchDrawable(circles, 100);
+    BatchCircleDrawable customBatchDrawable(circles, numSegmentsPerCircle);
 
     return customBatchDrawable;
 }
 
 /// Create a bunch of sf::CircleShapes.
-std::vector<sf::CircleShape> createSfmlCircles(int numCircles, int xmin, int xmax, int ymin, int ymax, int rmin, int rmax)
+std::vector<sf::CircleShape> createSfmlCircles(int numCircles, int xmin, int xmax, int ymin, int ymax, int rmin, int rmax, int numSegmentsPerCircle)
 {
 	std::vector<sf::CircleShape> sfmlCircles;
 	for (int i = 0; i < numCircles; i++)
@@ -34,7 +34,7 @@ std::vector<sf::CircleShape> createSfmlCircles(int numCircles, int xmin, int xma
         int x = randomInt(xmin, xmax);
         int y = randomInt(ymin, ymax);
         int r = randomInt(rmin, rmax);
-		sf::CircleShape circle(r, 100);
+		sf::CircleShape circle(r, numSegmentsPerCircle);
 		circle.setFillColor(sf::Color(rand() % 255, rand() % 255, rand() % 255, rand() % 255));
 		circle.setPosition(x, y);
 		sfmlCircles.push_back(circle);
@@ -77,13 +77,14 @@ int main()
     int ymax = window.getSize().y;
     int xmin = 0;
     int ymin = 0;
-    int rmax = 50;
-    int rmin = 0;
-    int numCircles = 50000;
+    int rmax = 5;
+    int rmin = 1;
+    int numCircles = 300000;
+    int numSegmentsPerCircle = 100;
 
     // we can either use my custom batch renderer, or just use sfml's built in circle renderer, so we create circles for both
-	BatchCircleDrawable customBatchDrawable = createBatchCircleDrawable(numCircles, xmin, xmax, ymin, ymax, rmin, rmax);
-	std::vector<sf::CircleShape> sfmlCircles = createSfmlCircles(numCircles, xmin, xmax, ymin, ymax, rmin, rmax);
+	BatchCircleDrawable customBatchDrawable = createBatchCircleDrawable(numCircles, xmin, xmax, ymin, ymax, rmin, rmax, numSegmentsPerCircle);
+	std::vector<sf::CircleShape> sfmlCircles = createSfmlCircles(numCircles, xmin, xmax, ymin, ymax, rmin, rmax, numSegmentsPerCircle);
     
     // this is what determines which will be rendered (my own batch renderer or sfmls)
     bool useCustomRenderer = true; // if false, use sfml renderer
