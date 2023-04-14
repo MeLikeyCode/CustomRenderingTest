@@ -1,7 +1,7 @@
 #include <GL/glew.h> // must be included before any opengl headers (sfml includes opengl headers, so we must include glew before sfml)
 #include <SFML/Graphics.hpp>
 
-#include "BatchCircleDrawable.h" // my own custom batch circle renderer (uses instancing)
+#include "CircleBatch.h" // my own custom batch circle renderer (uses instancing)
 
 /// Get a random integer in the range [from, to] (both inclusive)
 int randomInt(int from, int to)
@@ -9,8 +9,13 @@ int randomInt(int from, int to)
     return from + rand() % (to - from + 1);
 }
 
-/// Create a BatchCircleDrawable containing a bunch of random circles.
-BatchCircleDrawable createBatchCircleDrawable(int numCircles, int xmin, int xmax, int ymin, int ymax, int rmin, int rmax, int numSegmentsPerCircle)
+/// Get a random float in the range [from, to] (both inclusive)
+float randomFloat(float from, float to) {
+    return from + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (to - from)));
+}
+
+/// Create a CircleBatch containing a bunch of random circles.
+CircleBatch createBatchCircleDrawable(int numCircles, int xmin, int xmax, int ymin, int ymax, int rmin, int rmax, int numSegmentsPerCircle)
 {
 	std::vector<std::tuple<sf::Vector2f, float, sf::Color>> circles;
     for (int i = 0; i < numCircles; i++)
@@ -20,7 +25,7 @@ BatchCircleDrawable createBatchCircleDrawable(int numCircles, int xmin, int xmax
         int r = randomInt(rmin, rmax);
 		circles.push_back(std::make_tuple(sf::Vector2f(x, y), r, sf::Color(rand() % 255, rand() % 255, rand() % 255, rand() % 255)));
 	}
-    BatchCircleDrawable customBatchDrawable(circles, numSegmentsPerCircle);
+    CircleBatch customBatchDrawable(circles, numSegmentsPerCircle);
 
     return customBatchDrawable;
 }
@@ -57,6 +62,37 @@ sf::Text createFpsCounterText(const sf::Font& font)
 	return fps;
 }
 
+/// Move each circle individually (i.e. for each cirlce, issue one GPU command to modify its position data)
+void moveCirclesIndividually(CircleBatch& circleBatch, int numCirclesToMove, float moveAmount) {
+    for (size_t i = 0; i < numCirclesToMove; i++)
+    {
+        const auto circle = circleBatch.getCircle(i);
+        float dx = randomFloat(-1, 1) * moveAmount;
+        float dy = randomFloat(-1, 1) * moveAmount;
+        float newX = std::get<0>(circle).x + dx;
+        float newY = std::get<0>(circle).y + dy;
+        auto newCircle = std::make_tuple(sf::Vector2f(newX, newY), std::get<1>(circle), std::get<2>(circle));
+        circleBatch.modifyCircle(i, newCircle);
+    }
+}
+
+/// Move the circles in batch (i.e. issue a single GPU command to modify the position data of all the circles).
+void moveCirclesBatch(CircleBatch& circleBatch, int numCirclesToMove, float moveAmount) {
+    
+    std::vector<std::tuple<sf::Vector2f, float, sf::Color>> circles;
+    for (size_t i = 0; i < numCirclesToMove; i++)
+    {
+        const auto circle = circleBatch.getCircle(i);
+        float dx = randomFloat(-1, 1) * moveAmount;
+        float dy = randomFloat(-1, 1) * moveAmount;
+        float newX = std::get<0>(circle).x + dx;
+        float newY = std::get<0>(circle).y + dy;
+        auto newCircle = std::make_tuple(sf::Vector2f(newX, newY), std::get<1>(circle), std::get<2>(circle));
+        circles.push_back(newCircle);
+    }
+    circleBatch.modifyCircles(0,circles);
+}
+
 int main()
 {
     // create a sfml window, which also creates an opengl context.
@@ -83,7 +119,7 @@ int main()
     int numSegmentsPerCircle = 100;
 
     // we can either use my custom batch renderer, or just use sfml's built in circle renderer, so we create circles for both
-	BatchCircleDrawable customBatchDrawable = createBatchCircleDrawable(numCircles, xmin, xmax, ymin, ymax, rmin, rmax, numSegmentsPerCircle);
+	CircleBatch customBatchDrawable = createBatchCircleDrawable(numCircles, xmin, xmax, ymin, ymax, rmin, rmax, numSegmentsPerCircle);
 	std::vector<sf::CircleShape> sfmlCircles = createSfmlCircles(numCircles, xmin, xmax, ymin, ymax, rmin, rmax, numSegmentsPerCircle);
     
     // this is what determines which will be rendered (my own batch renderer or sfmls)
@@ -91,11 +127,14 @@ int main()
 
     window.setActive(true); // make the window's opengl context the current context (opengl commands operate on a current context)
 
-    int numFrames = 0; // number of frames that have passed
-    sf::Clock clock; // time that has passed
+    int framesPassed = 0; // number of frames that have passed since we updated the fps counter
+    sf::Clock fpsClock; // time that has passed since the last time we updated the fps counter
+
+    sf::Clock frameClock; // time since last frame
 
     while (window.isOpen())
     {
+        // handle all events in event queue
         sf::Event event;
         while (window.pollEvent(event))
         {
@@ -105,10 +144,21 @@ int main()
                 window.setView(sf::View(sf::FloatRect(0, 0, event.size.width, event.size.height)));
         }
 
+        // update
+        float dt = frameClock.restart().asSeconds();
+        float moveSpeed = 100; // pixels per second
+        //float moveAmount = moveSpeed * dt;
+        float moveAmount = 2;
+        int numCirclesToMove = customBatchDrawable.numCircles();
+        //int numCirclesToMove = 5000;
+        //moveCirclesIndividually(customBatchDrawable, numCirclesToMove, moveAmount);
+        moveCirclesBatch(customBatchDrawable, numCirclesToMove, moveAmount);
+
+        // render
         window.clear();
 
         if (useCustomRenderer)
-        {
+        {   
             // draw circles using custom batch (instancing) renderer
             window.draw(customBatchDrawable);
         }
@@ -124,12 +174,12 @@ int main()
         window.display();
 
         // update fps counter
-        numFrames += 1;
-        if (clock.getElapsedTime().asSeconds() >= 1.0f)
+        framesPassed += 1;
+        if (fpsClock.getElapsedTime().asSeconds() >= 1.0f)
         {
-            fps.setString(std::to_string(numFrames));
-            numFrames = 0;
-            clock.restart();
+            fps.setString(std::to_string(framesPassed));
+            framesPassed = 0;
+            fpsClock.restart();
         }
     }
 

@@ -1,4 +1,4 @@
-#include "BatchCircleDrawable.h"
+#include "CircleBatch.h"
 
 #include <string>
 #include <iostream>
@@ -6,9 +6,10 @@
 #include <GL/glew.h>
 #include <SFML/OpenGL.hpp>
 
-BatchCircleDrawable::BatchCircleDrawable(const std::vector<std::tuple<sf::Vector2f, float, sf::Color>>& circles, int segmentsPerCircle)
+CircleBatch::CircleBatch(const std::vector<std::tuple<sf::Vector2f, float, sf::Color>>& circles, int segmentsPerCircle)
 {
-	_numCircles = circles.size();
+	_circles = circles;
+	_sizePerInstance = 2 + 1 + 4; // 2 floats for position, 1 float for radius, 4 floats for color (rgba)
 
 	// vertex shader
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -92,7 +93,7 @@ BatchCircleDrawable::BatchCircleDrawable(const std::vector<std::tuple<sf::Vector
 		float angle = 2.0f * 3.1415926f * float(i) / float(segmentsPerCircle);
 		float x = cosf(angle);
 		float y = sinf(angle);
-		vertices.push_back(x);
+		vertices.push_back(x); 
 		vertices.push_back(y);
 	}
 	_numVerticesForACircle = vertices.size();
@@ -124,15 +125,14 @@ BatchCircleDrawable::BatchCircleDrawable(const std::vector<std::tuple<sf::Vector
 	}
 
 	// create instance vbo
-	GLuint instanceVBO;
-	glGenBuffers(1, &instanceVBO);
+	glGenBuffers(1, &_instanceVBO);
 
 	// Copy instance data to the instance VBO
-	glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
 	glBufferData(GL_ARRAY_BUFFER, instanceData.size() * sizeof(GLfloat), instanceData.data(), GL_STATIC_DRAW);
 
 	// Set instance attribute pointers for circle centers, radii, and colors
-	glBindVertexArray(instanceVBO);
+	glBindVertexArray(_instanceVBO);
 	
 	// center
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)(0 * sizeof(GLfloat)));
@@ -154,7 +154,52 @@ BatchCircleDrawable::BatchCircleDrawable(const std::vector<std::tuple<sf::Vector
 	glBindVertexArray(0);
 }
 
-void BatchCircleDrawable::draw(sf::RenderTarget& target, sf::RenderStates states) const
+int CircleBatch::numCircles() const
+{
+	return _circles.size();
+}
+
+void CircleBatch::modifyCircle(int circleIndex, const std::tuple<sf::Vector2f, float, sf::Color>& circle)
+{
+	// delegate to modifyCircles
+	std::vector<std::tuple<sf::Vector2f, float, sf::Color>> circles;
+	circles.push_back(circle);
+	modifyCircles(circleIndex, circles);
+}
+
+void CircleBatch::modifyCircles(int startIndex, const std::vector<std::tuple<sf::Vector2f, float, sf::Color>>& circles)
+{
+	// update instance data for each circle
+    std::vector<GLfloat> instanceData;
+	for (const auto& circle : circles)
+	{
+		const auto& position = std::get<0>(circle);
+		float radius = std::get<1>(circle);
+		const auto& color = std::get<2>(circle);
+
+		instanceData.push_back(position.x);
+		instanceData.push_back(position.y);
+		instanceData.push_back(radius);
+		instanceData.push_back(color.r / 255.0f);
+		instanceData.push_back(color.g / 255.0f);
+		instanceData.push_back(color.b / 255.0f);
+		instanceData.push_back(color.a / 255.0f);
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
+	glBufferSubData(GL_ARRAY_BUFFER, startIndex * _sizePerInstance * sizeof(GLfloat), instanceData.size() * sizeof(GLfloat), instanceData.data());
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	// update _circles
+	std::copy(circles.begin(), circles.end(), _circles.begin() + startIndex);
+}
+
+std::tuple<sf::Vector2f, float, sf::Color> CircleBatch::getCircle(int circleIndex) const
+{
+	return _circles[circleIndex];
+}
+
+void CircleBatch::draw(sf::RenderTarget& target, sf::RenderStates states) const
 {
 	//target.pushGLStates();
 
@@ -183,7 +228,7 @@ void BatchCircleDrawable::draw(sf::RenderTarget& target, sf::RenderStates states
 	glUniformMatrix4fv(transformLocation, 1, GL_FALSE, transform);
 
 	// Draw using instanced rendering
-	glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, _numVerticesForACircle, _numCircles);
+	glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, _numVerticesForACircle, _circles.size());
 
 	// unbind vao
 	glBindVertexArray(0);
@@ -192,7 +237,7 @@ void BatchCircleDrawable::draw(sf::RenderTarget& target, sf::RenderStates states
 	target.resetGLStates(); // so subsequently, sfml drawings can be drawn
 }
 
-void BatchCircleDrawable::_checkShaderCompileErrors(unsigned int shader)
+void CircleBatch::_checkShaderCompileErrors(unsigned int shader)
 {
 	GLint success;
 	GLchar infoLog[1024];
